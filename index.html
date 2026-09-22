@@ -35,16 +35,14 @@
 </head>
 <body>
 
-    <!-- PAGE 1: HOME / DASHBOARD -->
+<!-- PAGE 1: HOME / DASHBOARD -->
     <div id="page-1" class="page active">
         <header style="text-align: center; padding: 20px;">
-    <!-- Large custom emblem -->
-    <img src="icon.png" alt="Grizzly Gains Emblem" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
-    
-    <!-- Title removed since it's already in your emblem art -->
-    <p style="color: #aaa; font-size: 14px; margin-top: 5px;">Offline Weight Lifting Tracker</p>
-</header>
+            <img src="icon.png" alt="Grizzly Gains Emblem" style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
+            <p style="color: #aaa; font-size: 14px; margin-top: 5px;">Offline Weight Lifting Tracker</p>
+        </header>
         <button onclick="goToPage(4)">Select Workout</button>
+        <button class="secondary" onclick="goToPage(5)">Workout History</button>
         <button class="secondary" onclick="goToPage(2)">Manage Workouts</button>
     </div>
 
@@ -120,6 +118,7 @@
         
         if (pageNum === 2) renderWorkoutList();
         if (pageNum === 4) renderActiveWorkoutSelection();
+        if (pageNum === 5) renderHistory();
     }
 
     // PAGE 2 & 3: MANAGE WORKOUTS
@@ -250,15 +249,22 @@
             <div id="session-exercises">
         `;
 
-        w.exercises.forEach((ex, exIdx) => {
+w.exercises.forEach((ex, exIdx) => {
             html += `<div class="card">
                 <h3>${exIdx + 1}. ${ex.name}</h3>`;
             
             for (let s = 1; s <= ex.sets; s++) {
+                // Look up what was lifted last time for this exact set!
+                let lastLift = getLastSessionData(ex.name, s);
+                let lastLiftText = lastLift ? `<span style="color: var(--accent-color); font-size: 12px; float: right;">Last: ${lastLift}</span>` : '';
+
                 html += `
                     <div class="set-box">
-                        <span class="badge">Set ${s}</span>
-                        <div class="row" style="margin-top: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span class="badge">Set ${s}</span>
+                            ${lastLiftText}
+                        </div>
+                        <div class="row">
                             <input type="number" placeholder="Weight (kg)" class="set-weight" data-ex="${exIdx}" data-set="${s}" style="margin:0;">
                             <input type="number" placeholder="Reps" class="set-reps" data-ex="${exIdx}" data-set="${s}" style="margin:0;">
                         </div>
@@ -281,34 +287,56 @@
         renderActiveWorkoutSelection();
     }
 
-    function exportWorkout() {
+function exportWorkout() {
         let w = selectedWorkoutForSession;
         let date = document.getElementById('session-date').value;
         let notes = document.getElementById('session-notes').value;
 
         let output = `🏋️ **${w.name}** - ${date}\n`;
+        let exercisesCompleted = [];
+        let rawExerciseData = []; // Structured data for history lookup
         
         w.exercises.forEach((ex, exIdx) => {
             output += `\n${exIdx + 1}. ${ex.name}/\n`;
+            let exHistoryString = `<strong>${ex.name}</strong><br>`;
+            let setRecords = [];
+            
             for (let s = 1; s <= ex.sets; s++) {
                 let weightInput = document.querySelector(`.set-weight[data-ex="${exIdx}"][data-set="${s}"]`);
                 let repsInput = document.querySelector(`.set-reps[data-ex="${exIdx}"][data-set="${s}"]`);
-                let wVal = weightInput && weightInput.value ? weightInput.value + 'kg' : '0kg';
-                let rVal = repsInput && repsInput.value ? repsInput.value + 'reps' : '0reps';
-                output += `  (Set #${s}: ${wVal} / ${rVal})\n`;
+                let wVal = weightInput && weightInput.value ? weightInput.value : '0';
+                let rVal = repsInput && repsInput.value ? repsInput.value : '0';
+                
+                output += `  (Set #${s}: ${wVal}kg / ${rVal}reps)\n`;
+                exHistoryString += `&nbsp;&nbsp;Set ${s}: ${wVal}kg / ${rVal}reps<br>`;
+                setRecords.push({ setNum: s, weight: wVal, reps: rVal });
             }
+            exercisesCompleted.push(exHistoryString);
+            rawExerciseData.push({ name: ex.name, sets: setRecords });
         });
 
         if (notes) {
             output += `\nNotes: ${notes}`;
         }
 
+        // Save session with raw data
+        let history = JSON.parse(localStorage.getItem('workoutHistory')) || [];
+        history.unshift({
+            date: date,
+            name: w.name,
+            exercises: exercisesCompleted,
+            rawExercises: rawExerciseData
+        });
+        localStorage.setItem('workoutHistory', JSON.stringify(history));
+
         // Copy to clipboard
         navigator.clipboard.writeText(output).then(() => {
-            alert('Workout summary copied to clipboard! You can now paste it into WhatsApp, Notes, etc.');
+            alert('Workout summary copied & saved to history!');
+            goToPage(1);
         }).catch(err => {
             console.error('Failed to copy', err);
             prompt('Copy your workout summary below:', output);
+            goToPage(1);
         });
     }
 
@@ -386,6 +414,23 @@ function importData(event) {
     };
     fileReader.readAsText(event.target.files[0]);
 }
+
+function getLastSessionData(exerciseName, targetSetNum) {
+        let history = JSON.parse(localStorage.getItem('workoutHistory')) || [];
+        for (let session of history) {
+            if (session.rawExercises) {
+                for (let ex of session.rawExercises) {
+                    if (ex.name.toLowerCase() === exerciseName.toLowerCase()) {
+                        let matchedSet = ex.sets.find(s => s.setNum === targetSetNum);
+                        if (matchedSet) {
+                            return `${matchedSet.weight}kg × ${matchedSet.reps}r`;
+                        }
+                    }
+                }
+            }
+        }
+        return null; // No history found yet
+    }
 </script>
 </body>
 </html>
