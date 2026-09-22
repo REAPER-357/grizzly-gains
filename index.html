@@ -48,15 +48,23 @@
         <button class="secondary" onclick="goToPage(2)">Manage Workouts</button>
     </div>
 
-    <!-- PAGE 2: MANAGE WORKOUTS -->
-    <div id="page-2" class="page">
-        <div class="header-flex">
-            <h2>Manage Workouts</h2>
-            <button class="secondary" style="width: auto; padding: 8px 12px; margin: 0;" onclick="goToPage(1)">Back</button>
-        </div>
-        <button onclick="openEditor(null)">+ Create New Workout</button>
-        <div id="workout-list"></div>
+<!-- PAGE 2: MANAGE WORKOUTS -->
+<div id="page-2" class="page">
+    <div class="header-flex">
+        <h2>Manage Workouts</h2>
+        <button class="class="secondary" style="width: auto; padding: 8px 12px; margin: 0;" onclick="gotoPage(1)">Back</button>
     </div>
+    <button onclick="openEditor(null)">+ Create New Workout</button>
+    <div id="workout-list"></div>
+
+    <!-- PASTE BACKUP SECTION HERE -->
+    <div style="margin-top: 30px; padding: 15px; background: #1a1a1a; border-radius: 8px; text-align: center; border: 1px solid #333;">
+        <h3 style="color: #fff; font-size: 15px; margin-bottom: 10px;">Data Backup & Restore</h3>
+        <button onclick="exportData()" class="secondary" style="margin-bottom: 8px;">Export Workouts (.json)</button>
+        <input type="file" id="importFile" accept=".json" onchange="importData(event)" style="display: none;">
+        <button onclick="document.getElementById('importFile').click()" class="secondary">Import Workouts</button>
+    </div>
+</div>
 
     <!-- PAGE 3: CREATE / EDIT WORKOUT -->
     <div id="page-3" class="page">
@@ -292,6 +300,36 @@
             prompt('Copy your workout summary below:', output);
         });
     }
+</script>
+<script>
+// Function to export localStorage to a downloadable JSON file
+function exportData() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(localStorage));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "grizzly-gains-backup.json");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+}
+
+// Function to import data back into localStorage from a backup file
+function importData(event) {
+    const fileReader = new FileReader();
+    fileReader.onload = function(e) {
+        try {
+            const importedData = JSON.parse(e.target.result);
+            Object.keys(importedData).forEach(key => {
+                localStorage.setItem(key, importedData[key]);
+            });
+            alert("Workouts successfully imported! Refreshing app...");
+            location.reload();
+        } catch (error) {
+            alert("Invalid backup file.");
+        }
+    };
+    fileReader.readAsText(event.target.files[0]);
+}
 </script>
 </body>
 </html>
