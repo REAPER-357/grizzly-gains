@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grizzly Gains</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --accent-color: #ff9800;
+            --accent-hover: #e68900;
+            --danger-color: #cf6679;
+            --border-color: #333;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); padding: 16px; max-width: 600px; margin: 0 auto; }
+        h1, h2, h3 { color: #fff; margin-bottom: 12px; }
+        button { background-color: var(--accent-color); color: #000; border: none; padding: 12px 20px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%; margin-bottom: 10px; font-size: 16px; }
+        button:hover { background-color: var(--accent-hover); }
+        button.secondary { background-color: #333; color: var(--text-color); }
+        button.danger { background-color: var(--danger-color); color: #fff; }
+        input, textarea { width: 100%; padding: 10px; margin-bottom: 12px; background: #2a2a2a; border: 1px solid var(--border-color); color: #fff; border-radius: 6px; font-size: 16px; }
+        label { display: block; margin-bottom: 4px; font-size: 14px; color: #aaa; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .card { background: var(--card-bg); padding: 16px; border-radius: 12px; margin-bottom: 12px; border: 1px solid var(--border-color); }
+        .row { display: flex; gap: 8px; align-items: center; }
+        .set-box { background: #252525; padding: 8px; border-radius: 6px; margin-bottom: 8px; border: 1px solid #444; }
+        .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .badge { background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px; color: var(--accent-color); }
+    </style>
+</head>
+<body>
+
+    <!-- PAGE 1: HOME / DASHBOARD -->
+    <div id="page-1" class="page active">
+        <div style="text-align: center; margin: 30px 0;">
+            <h1>🐻 GRIZZLY GAINS</h1>
+            <p style="color: #888;">Offline Weight Lifting Tracker</p>
+        </div>
+        <button onclick="goToPage(4)">Select Workout</button>
+        <button class="secondary" onclick="goToPage(2)">Manage Workouts</button>
+    </div>
+
+    <!-- PAGE 2: MANAGE WORKOUTS -->
+    <div id="page-2" class="page">
+        <div class="header-flex">
+            <h2>Manage Workouts</h2>
+            <button class="secondary" style="width: auto; padding: 8px 12px; margin: 0;" onclick="goToPage(1)">Back</button>
+        </div>
+        <button onclick="openEditor(null)">+ Create New Workout</button>
+        <div id="workout-list"></div>
+    </div>
+
+    <!-- PAGE 3: CREATE / EDIT WORKOUT -->
+    <div id="page-3" class="page">
+        <h2 id="editor-title">Create Workout</h2>
+        <label>Workout Name / Title</label>
+        <input type="text" id="workout-name-input" placeholder="e.g., Upper A">
+        
+        <h3>Exercises (Max 10)</h3>
+        <div id="exercise-inputs-container"></div>
+        <button class="secondary" onclick="addExerciseInput()">+ Add Exercise</button>
+        
+        <button onclick="saveWorkout()">Save Workout</button>
+        <button class="secondary" onclick="goToPage(2)">Cancel</button>
+    </div>
+
+    <!-- PAGE 4: ACTIVE WORKOUT SESSION -->
+    <div id="page-4" class="page">
+        <div class="header-flex">
+            <h2 id="active-workout-title">Workout</h2>
+            <button class="secondary" style="width: auto; padding: 8px 12px; margin: 0;" onclick="goToPage(1)">Home</button>
+        </div>
+        
+        <label>Date</label>
+        <input type="date" id="session-date">
+
+        <div id="active-exercises-container"></div>
+
+        <label>Notes</label>
+        <textarea id="session-notes" rows="3" placeholder="How did it feel today?"></textarea>
+
+        <button onclick="exportWorkout()">Export Exercise Summary</button>
+    </div>
+
+<script>
+    let workouts = JSON.parse(localStorage.getItem('grizzly_workouts')) || [];
+    let currentEditingId = null;
+    let selectedWorkoutForSession = null;
+
+    function goToPage(pageNum) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-' + pageNum).classList.add('active');
+        
+        if (pageNum === 2) renderWorkoutList();
+        if (pageNum === 4) renderActiveWorkoutSelection();
+    }
+
+    // PAGE 2 & 3: MANAGE WORKOUTS
+    function renderWorkoutList() {
+        const container = document.getElementById('workout-list');
+        if (workouts.length === 0) {
+            container.innerHTML = '<p style="color: #777; text-align: center; margin-top: 20px;">No workouts created yet.</p>';
+            return;
+        }
+        container.innerHTML = workouts.map((w, index) => `
+            <div class="card">
+                <h3>${w.name}</h3>
+                <p style="color: #aaa; font-size: 14px; margin-bottom: 10px;">${w.exercises.length} Exercises</p>
+                <div class="row">
+                    <button class="secondary" onclick="openEditor(${index})" style="margin:0;">Edit</button>
+                    <button class="danger" onclick="deleteWorkout(${index})" style="margin:0;">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function openEditor(index) {
+        currentEditingId = index;
+        document.getElementById('exercise-inputs-container').innerHTML = '';
+        
+        if (index !== null) {
+            document.getElementById('editor-title').innerText = 'Edit Workout';
+            document.getElementById('workout-name-input').value = workouts[index].name;
+            workouts[index].exercises.forEach(ex => addExerciseInput(ex.name, ex.sets, ex.reps));
+        } else {
+            document.getElementById('editor-title').innerText = 'Create Workout';
+            document.getElementById('workout-name-input').value = '';
+            addExerciseInput(); // Add one default row
+        }
+        goToPage(3);
+    }
+
+    function addExerciseInput(name = '', sets = 3, reps = 10) {
+        const container = document.getElementById('exercise-inputs-container');
+        if (container.children.length >= 10) {
+            alert('Maximum 10 exercises allowed.');
+            return;
+        }
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `
+            <label>Exercise Name</label>
+            <input type="text" class="ex-name" value="${name}" placeholder="e.g., Bench Press">
+            <div class="row">
+                <div>
+                    <label>Target Sets</label>
+                    <input type="number" class="ex-sets" value="${sets}" min="1" max="10">
+                </div>
+                <div>
+                    <label>Target Reps</label>
+                    <input type="number" class="ex-reps" value="${reps}" min="1" max="100">
+                </div>
+            </div>
+            <button class="danger" style="margin-top: 8px; padding: 6px;" onclick="this.parentElement.remove()">Remove Exercise</button>
+        `;
+        container.appendChild(div);
+    }
+
+    function saveWorkout() {
+        const name = document.getElementById('workout-name-input').value.trim();
+        if (!name) { alert('Please enter a workout name.'); return; }
+        
+        const exerciseCards = document.querySelectorAll('#exercise-inputs-container .card');
+        if (exerciseCards.length === 0) { alert('Add at least one exercise.'); return; }
+
+        let exercises = [];
+        exerciseCards.forEach(card => {
+            exercises.push({
+                name: card.querySelector('.ex-name').value.trim() || 'Unnamed Exercise',
+                sets: parseInt(card.querySelector('.ex-sets').value) || 3,
+                reps: parseInt(card.querySelector('.ex-reps').value) || 10
+            });
+        });
+
+        if (currentEditingId !== null) {
+            workouts[currentEditingId] = { name, exercises };
+        } else {
+            workouts.push({ name, exercises });
+        }
+
+        localStorage.setItem('grizzly_workouts', JSON.stringify(workouts));
+        goToPage(2);
+    }
+
+    function deleteWorkout(index) {
+        if (confirm('Are you sure you want to delete this workout?')) {
+            workouts.splice(index, 1);
+            localStorage.setItem('grizzly_workouts', JSON.stringify(workouts));
+            renderWorkoutList();
+        }
+    }
+
+    // PAGE 4: ACTIVE SESSION
+    function renderActiveWorkoutSelection() {
+        const container = document.getElementById('page-4');
+        if (workouts.length === 0) {
+            container.innerHTML = '<h2>No Workouts Found</h2><p>Please create a workout first.</p><button class="secondary" onclick="goToPage(1)">Back</button>';
+            return;
+        }
+
+        // If no workout selected yet, let user pick one
+        if (!selectedWorkoutForSession) {
+            let html = '<div class="header-flex"><h2>Select Workout</h2><button class="secondary" style="width:auto; padding:8px 12px; margin:0;" onclick="goToPage(1)">Home</button></div>';
+            workouts.forEach((w, idx) => {
+                html += `<button onclick="startSession(${idx})">${w.name}</button>`;
+            });
+            container.innerHTML = html;
+            return;
+        }
+
+        // Render Active Session UI
+        let w = selectedWorkoutForSession;
+        let today = new Date().toISOString().split('T')[0];
+        
+        let html = `
+            <div class="header-flex">
+                <h2 id="active-workout-title">${w.name}</h2>
+                <button class="secondary" style="width: auto; padding: 6px 10px; margin: 0;" onclick="selectedWorkoutForSession=null; renderActiveWorkoutSelection();">Change</button>
+            </div>
+            
+            <label>Date</label>
+            <input type="date" id="session-date" value="${today}">
+            <div id="session-exercises">
+        `;
+
+        w.exercises.forEach((ex, exIdx) => {
+            html += `<div class="card">
+                <h3>${exIdx + 1}. ${ex.name}</h3>`;
+            
+            for (let s = 1; s <= ex.sets; s++) {
+                html += `
+                    <div class="set-box">
+                        <span class="badge">Set ${s}</span>
+                        <div class="row" style="margin-top: 6px;">
+                            <input type="number" placeholder="Weight (kg)" class="set-weight" data-ex="${exIdx}" data-set="${s}" style="margin:0;">
+                            <input type="number" placeholder="Reps" class="set-reps" data-ex="${exIdx}" data-set="${s}" style="margin:0;">
+                        </div>
+                    </div>
+                `;
+            }
+            html += `</div>`;
+        });
+
+        html += `
+            <label>Notes</label>
+            <textarea id="session-notes" rows="3" placeholder="Notes on performance, energy, etc..."></textarea>
+            <button onclick="exportWorkout()">Export Exercise Summary</button>
+        `;
+        container.innerHTML = html;
+    }
+
+    function startSession(index) {
+        selectedWorkoutForSession = workouts[index];
+        renderActiveWorkoutSelection();
+    }
+
+    function exportWorkout() {
+        let w = selectedWorkoutForSession;
+        let date = document.getElementById('session-date').value;
+        let notes = document.getElementById('session-notes').value;
+
+        let output = `🏋️ **${w.name}** - ${date}\n`;
+        
+        w.exercises.forEach((ex, exIdx) => {
+            output += `\n${exIdx + 1}. ${ex.name}/\n`;
+            for (let s = 1; s <= ex.sets; s++) {
+                let weightInput = document.querySelector(`.set-weight[data-ex="${exIdx}"][data-set="${s}"]`);
+                let repsInput = document.querySelector(`.set-reps[data-ex="${exIdx}"][data-set="${s}"]`);
+                let wVal = weightInput && weightInput.value ? weightInput.value + 'kg' : '0kg';
+                let rVal = repsInput && repsInput.value ? repsInput.value + 'reps' : '0reps';
+                output += `  (Set #${s}: ${wVal} / ${rVal})\n`;
+            }
+        });
+
+        if (notes) {
+            output += `\nNotes: ${notes}`;
+        }
+
+        // Copy to clipboard
+        navigator.clipboard.writeText(output).then(() => {
+            alert('Workout summary copied to clipboard! You can now paste it into WhatsApp, Notes, etc.');
+        }).catch(err => {
+            console.error('Failed to copy', err);
+            prompt('Copy your workout summary below:', output);
+        });
+    }
+</script>
+</body>
+</html>
