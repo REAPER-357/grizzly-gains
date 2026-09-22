@@ -43,6 +43,8 @@
         </header>
         <button onclick="goToPage(4)">Select Workout</button>
         <button class="secondary" onclick="goToPage(5)">Workout History</button>
+        <button class="secondary" onclick="goToPage(6)">Exercise Progress Graph</button>
+        <button class="secondary" onclick="goToPage(7)">Body Weight Tracker</button>
         <button class="secondary" onclick="goToPage(2)">Manage Workouts</button>
     </div>
 
@@ -105,6 +107,46 @@
     <div id="history-list" style="margin-top: 15px;">
         <p style="color: #aaa; text-align: center;">No completed workout history yet.</p>
     </div>
+
+<!-- PAGE 6: EXERCISE PROGRESS GRAPH -->
+<div id="page-6" class="page">
+    <div class="header-flex">
+        <h2>Exercise Progress</h2>
+        <button class="secondary" style="width: auto; padding: 8px 12px; margin: 0;" onclick="goToPage(1)">Back</button>
+    </div>
+    
+    <label>Select Exercise</label>
+    <select id="progress-exercise-select" onchange="renderExerciseProgressGraph()" style="margin-bottom: 16px;">
+        <option value="">-- Choose an exercise --</option>
+    </select>
+
+    <div class="card" style="text-align: center;">
+        <h3 id="graph-title-text" style="font-size: 16px; margin-bottom: 10px; color: var(--accent-color);">Select an exercise above</h3>
+        <div style="position: relative; width: 100%; height: 220px; background: #161616; border-radius: 8px; border: 1px solid #333; overflow: hidden; display: flex; align-items: center; justify-content: center;" id="canvas-container">
+            <canvas id="progressCanvas" width="500" height="200" style="width: 100%; height: 100%; display: block;"></canvas>
+        </div>
+        <p id="graph-stats-sub" style="font-size: 13px; color: #aaa; margin-top: 10px;"></p>
+    </div>
+
+<!-- PAGE 7: BODY WEIGHT TRACKER -->
+<div id="page-7" class="page">
+    <div class="header-flex">
+        <h2>Body Weight Tracker</h2>
+        <button class="secondary" style="width: auto; padding: 8px 12px; margin: 0;" onclick="goToPage(1)">Back</button>
+    </div>
+
+    <div class="card">
+        <label>Date</label>
+        <input type="date" id="bw-date">
+        <label>Body Weight (kg)</label>
+        <input type="number" id="bw-value" step="0.1" placeholder="e.g., 75.5">
+        <button onclick="saveBodyWeight()">Log Weight</button>
+    </div>
+
+    <h3>Weight History</h3>
+    <div id="bw-history-list">
+        <p style="color: #aaa; text-align: center;">No body weight history recorded yet.</p>
+    </div>
 </div>
 
 <script>
@@ -112,13 +154,15 @@
     let currentEditingId = null;
     let selectedWorkoutForSession = null;
 
-    function goToPage(pageNum) {
+function goToPage(pageNum) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById('page-' + pageNum).classList.add('active');
         
         if (pageNum === 2) renderWorkoutList();
         if (pageNum === 4) renderActiveWorkoutSelection();
         if (pageNum === 5) renderHistory();
+        if (pageNum === 6) initProgressPage();
+        if (pageNum === 7) initBodyWeightPage();
     }
 
     // PAGE 2 & 3: MANAGE WORKOUTS
@@ -430,6 +474,207 @@ function getLastSessionData(exerciseName, targetSetNum) {
             }
         }
         return null; // No history found yet
+    }
+
+// Populate dropdown with unique exercises found in history
+    function initProgressPage() {
+        let history = JSON.parse(localStorage.getItem('workoutHistory')) || [];
+        let exerciseSet = new Set();
+
+        history.forEach(session => {
+            if (session.rawExercises) {
+                session.rawExercises.forEach(ex => {
+                    if (ex.name) exerciseSet.add(ex.name);
+                });
+            }
+        });
+
+        let select = document.getElementById('progress-exercise-select');
+        let optionsHtml = '<option value="">-- Choose an exercise --</option>';
+        
+        Array.from(exerciseSet).sort().forEach(exName => {
+            optionsHtml += `<option value="${exName}">${exName}</option>`;
+        });
+        select.innerHTML = optionsHtml;
+
+        // Clear graph on load
+        clearProgressCanvas("Select an exercise above to view progress");
+    }
+
+    function clearProgressCanvas(message) {
+        let canvas = document.getElementById('progressCanvas');
+        let ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('graph-title-text').innerText = message;
+        document.getElementById('graph-stats-sub').innerText = '';
+    }
+
+    // Filter and draw line graph using HTML5 Canvas
+    function renderExerciseProgressGraph() {
+        let exerciseName = document.getElementById('progress-exercise-select').value;
+        if (!exerciseName) {
+            clearProgressCanvas("Select an exercise above to view progress");
+            return;
+        }
+
+        let history = JSON.parse(localStorage.getItem('workoutHistory')) || [];
+        let dataPoints = [];
+
+        // Loop through history chronologically (oldest to newest for graphs)
+        for (let i = history.length - 1; i >= 0; i--) {
+            let session = history[i];
+            if (session.rawExercises) {
+                let foundEx = session.rawExercises.find(ex => ex.name.toLowerCase() === exerciseName.toLowerCase());
+                if (foundEx) {
+                    // Find max weight lifted in this session for this exercise
+                    let maxWeight = 0;
+                    foundEx.sets.forEach(s => {
+                        let w = parseFloat(s.weight) || 0;
+                        if (w > maxWeight) maxWeight = w;
+                    });
+                    
+                    if (maxWeight > 0) {
+                        dataPoints.push({
+                            date: session.date,
+                            weight: maxWeight
+                        });
+                    }
+                }
+            }
+        }
+
+        let canvas = document.getElementById('progressCanvas');
+        let ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (dataPoints.length === 0) {
+            clearProgressCanvas(`No weight logged yet for ${exerciseName}`);
+            return;
+        }
+
+        document.getElementById('graph-title-text').innerText = `${exerciseName} (Max Weight per Session)`;
+        document.getElementById('graph-stats-sub').innerText = `Total Sessions Logged: ${dataPoints.length} | Peak: ${Math.max(...dataPoints.map(d => d.weight))} kg`;
+
+        // Canvas mapping calculations
+        let padding = 35;
+        let width = canvas.width;
+        let height = canvas.height;
+        let graphWidth = width - (padding * 2);
+        let graphHeight = height - (padding * 2);
+
+        let weights = dataPoints.map(d => d.weight);
+        let minW = Math.min(...weights);
+        let maxW = Math.max(...weights);
+        let weightRange = maxW - minW || 1;
+        
+        // Add padding margin to Y axis bounds
+        let yMin = Math.max(0, minW - (weightRange * 0.1 || 5));
+        let yMax = maxW + (weightRange * 0.1 || 5);
+
+        // Draw axes lines
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, height - padding);
+        ctx.lineTo(width - padding, height - padding);
+        ctx.stroke();
+
+        // Plot data points & connect lines
+        ctx.strokeStyle = '#ff9800';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+
+        let coords = [];
+        dataPoints.forEach((pt, idx) => {
+            let x = padding + (idx / (dataPoints.length === 1 ? 1 : dataPoints.length - 1)) * graphWidth;
+            let y = (height - padding) - ((pt.weight - yMin) / (yMax - yMin)) * graphHeight;
+            coords.push({ x, y, weight: pt.weight, date: pt.date });
+
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Draw data dots and labels
+        coords.forEach(c => {
+            // Dot circle
+            ctx.fillStyle = '#121212';
+            ctx.strokeStyle = '#ff9800';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Text weight label above dot
+            ctx.fillStyle = '#e0e0e0';
+            ctx.font = '10px system-ui';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${c.weight}kg`, c.x, c.y - 8);
+        });
+    }
+
+// Initialize Body Weight Page
+    function initBodyWeightPage() {
+        // Default date input to today
+        document.getElementById('bw-date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('bw-value').value = '';
+        renderBodyWeightHistory();
+    }
+
+    // Save a body weight entry
+    function saveBodyWeight() {
+        let date = document.getElementById('bw-date').value;
+        let weight = parseFloat(document.getElementById('bw-value').value);
+
+        if (!date ||isNaN(weight) || weight <= 0) {
+            alert('Please enter a valid date and body weight.');
+            return;
+        }
+
+        let bwHistory = JSON.parse(localStorage.getItem('bodyWeightHistory')) || [];
+        bwHistory.unshift({ date, weight }); // Add to top of list
+        localStorage.setItem('bodyWeightHistory', JSON.stringify(bwHistory));
+
+        document.getElementById('bw-value').value = '';
+        renderBodyWeightHistory();
+        alert('Body weight logged successfully!');
+    }
+
+    // Render body weight history list
+    function renderBodyWeightHistory() {
+        let bwHistory = JSON.parse(localStorage.getItem('bodyWeightHistory')) || [];
+        let container = document.getElementById('bw-history-list');
+
+        if (bwHistory.length === 0) {
+            container.innerHTML = '<p style="color: #aaa; text-align: center;">No body weight history recorded yet.</p>';
+            return;
+        }
+
+        let html = '';
+        bwHistory.forEach((entry, index) => {
+            html += `
+                <div class="card" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 8px;">
+                    <div>
+                        <span style="color: var(--accent-color); font-weight: bold; font-size: 16px;">${entry.weight} kg</span>
+                        <div style="color: #aaa; font-size: 12px; margin-top: 2px;">${entry.date}</div>
+                    </div>
+                    <button class="danger" style="width: auto; padding: 6px 10px; margin: 0; font-size: 12px;" onclick="deleteBodyWeight(${index})">Delete</button>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    }
+
+    // Delete a body weight entry
+    function deleteBodyWeight(index) {
+        if (confirm('Are you sure you want to delete this entry?')) {
+            let bwHistory = JSON.parse(localStorage.getItem('bodyWeightHistory')) || [];
+            bwHistory.splice(index, 1);
+            localStorage.setItem('bodyWeightHistory', JSON.stringify(bwHistory));
+            renderBodyWeightHistory();
+        }
     }
 </script>
 </body>
