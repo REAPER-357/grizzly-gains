@@ -52,7 +52,7 @@
 <div id="page-2" class="page">
     <div class="header-flex">
         <h2>Manage Workouts</h2>
-        <button class="class="secondary" style="width: auto; padding: 8px 12px; margin: 0;" onclick="gotoPage(1)">Back</button>
+        <button class="secondary" style="width: auto; padding: 8px 12px; margin: 0;" onclick="gotoPage(1)">Back</button>
     </div>
     <button onclick="openEditor(null)">+ Create New Workout</button>
     <div id="workout-list"></div>
@@ -97,6 +97,17 @@
 
         <button onclick="exportWorkout()">Export Exercise Summary</button>
     </div>
+
+<!-- PAGE 5: WORKOUT HISTORY -->
+<div id="page-5" class="page">
+    <div class="header-flex">
+        <h2>Workout History</h2>
+        <button class="secondary" style="width: auto; padding: 8px 12px; margin: 0;" onclick="gotoPage(1)">Back</button>
+    </div>
+    <div id="history-list" style="margin-top: 15px;">
+        <p style="color: #aaa; text-align: center;">No completed workout history yet.</p>
+    </div>
+</div>
 
 <script>
     let workouts = JSON.parse(localStorage.getItem('grizzly_workouts')) || [];
@@ -300,6 +311,51 @@
             prompt('Copy your workout summary below:', output);
         });
     }
+
+// Function to save a completed workout to history
+function saveWorkoutHistory(workoutName, exercisesCompleted) {
+    let history = JSON.parse(localStorage.getItem('workoutHistory')) || [];
+    
+    const session = {
+        date: new Date().toLocaleDateString(),
+        name: workoutName,
+        exercises: exercisesCompleted
+    };
+    
+    history.unshift(session); // Add to the top of the list
+    localStorage.setItem('workoutHistory', JSON.stringify(history));
+    renderHistory();
+}
+
+// Function to render workout history on Page 5, grouped by name
+function renderHistory() {
+    const historyList = document.getElementById('history-list');
+    let history = JSON.parse(localStorage.getItem('workoutHistory')) || [];
+    
+    if (history.length === 0) {
+        historyList.innerHTML = '<p style="color: #aaa; text-align: center;">No completed workout history yet.</p>';
+        return;
+    }
+    
+    let html = '';
+    history.forEach(session => {
+        html += `
+            <div style="background: #252525; padding: 12px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #333;">
+                <div style="display: flex; justify-content: space-between; color: var(--accent-color); font-weight: bold; margin-bottom: 5px;">
+                    <span>${session.name}</span>
+                    <span style="color: #aaa; font-size: 13px;">${session.date}</span>
+                </div>
+                <div style="color: #ddd; font-size: 14px;">
+                    ${session.exercises.join('<br>')}
+                </div>
+            </div>
+        `;
+    });
+    historyList.innerHTML = html;
+}
+
+// Automatically load history when Page 5 opens
+// (Make sure to call renderHistory() when navigating to page 5)
 </script>
 <script>
 // Function to export localStorage to a downloadable JSON file
